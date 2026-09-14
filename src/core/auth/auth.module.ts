@@ -1,6 +1,7 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
+import { PassportModule } from '@nestjs/passport';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import type { SignOptions } from 'jsonwebtoken';
@@ -15,12 +16,14 @@ import { AuthService } from './services/auth.service';
 import { EmailVerificationService } from './services/email-verification.service';
 import { PasswordResetService } from './services/password-reset.service';
 import { TokenService } from './services/token.service';
+import { GoogleStrategy } from './strategies/google.strategy';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { LocalStrategy } from './strategies/local.strategy';
 
 @Module({
   imports: [
     UsersModule,
+    PassportModule,
     forwardRef(() => QueueModule),
     TypeOrmModule.forFeature([RefreshToken]),
     JwtModule.registerAsync({
@@ -50,6 +53,7 @@ import { LocalStrategy } from './strategies/local.strategy';
     LocalStrategy,
     JwtStrategy,
     AuthListener,
+    GoogleStrategy,
   ],
   exports: [
     AuthService,

@@ -140,4 +140,8 @@ export class UsersService {
       profilePicture,
     });
   }
+
+  findOneByGoogleId(googleId: string): Promise<User | null> {
+    return this.usersRepository.findOneBy({ googleId });
+  }
 }

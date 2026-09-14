@@ -4,7 +4,8 @@ import { JwtService } from '@nestjs/jwt';
 
 import type { UUID } from 'node:crypto';
 
-import { AccountStatus, User } from '../../users/entities/user.entity';
+import { User } from '../../users/entities/user.entity';
+import { AccountStatus } from '../../users/enums/user.enum';
 import { UsersService } from '../../users/services/users.service';
 
 @Injectable()

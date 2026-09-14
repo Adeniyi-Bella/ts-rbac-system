@@ -214,4 +214,20 @@ describe('UsersService', () => {
       profilePicture: 'https://image.test/a.jpg',
     });
   });
+
+  it('finds a user by googleId', async () => {
+    const googleUser = { id: 'user-id', googleId: 'g-12345' } as User;
+    repository.findOneBy.mockResolvedValue(googleUser);
+
+    await expect(service.findOneByGoogleId('g-12345')).resolves.toBe(
+      googleUser,
+    );
+    expect(repository.findOneBy).toHaveBeenCalledWith({ googleId: 'g-12345' });
+  });
+
+  it('returns null when no user matches the googleId', async () => {
+    repository.findOneBy.mockResolvedValue(null);
+
+    await expect(service.findOneByGoogleId('missing-id')).resolves.toBeNull();
+  });
 });

@@ -7,7 +7,7 @@ import { App } from 'supertest/types';
 import { DataSource } from 'typeorm';
 
 import { AppModule } from '../../../src/app.module';
-import { UserRole } from '../../../src/core/users/entities/user.entity';
+import { UserRole } from '../../../src/core/users/enums/user.enum';
 import { UsersService } from '../../../src/core/users/services/users.service';
 import { EmailService } from '../../../src/infrastructure/email/email.service';
 

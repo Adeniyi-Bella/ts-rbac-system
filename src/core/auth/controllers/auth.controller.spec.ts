@@ -1,4 +1,4 @@
-import { AuthController } from './auth.controller';
+import { AuthController, RequestWithGoogleUser } from './auth.controller';
 
 import { AuthService } from '../services/auth.service';
 import { EmailVerificationService } from '../services/email-verification.service';
@@ -7,7 +7,11 @@ import { TokenService } from '../services/token.service';
 
 describe('AuthController', () => {
   let controller: AuthController;
-  const auth = { login: jest.fn(), register: jest.fn() };
+  const auth = {
+    login: jest.fn(),
+    register: jest.fn(),
+    loginWithGoogle: jest.fn(),
+  };
   const tokens = { refreshTokens: jest.fn(), logout: jest.fn() };
   const verification = { verifyEmail: jest.fn() };
   const passwordReset = {
@@ -78,5 +82,29 @@ describe('AuthController', () => {
     ).resolves.toEqual({
       message: 'Your password has been reset successfully.',
     });
+  });
+
+  it('delegates the Google OAuth callback to AuthService', async () => {
+    const googleProfile = {
+      googleId: 'g-12345',
+      email: 'user@example.com',
+      name: 'Google User',
+    };
+    auth.loginWithGoogle.mockResolvedValue({
+      accessToken: 'access',
+      refreshToken: 'refresh',
+    });
+
+    const req = { user: googleProfile } as RequestWithGoogleUser;
+
+    await expect(controller.googleAuthCallback(req)).resolves.toEqual({
+      accessToken: 'access',
+      refreshToken: 'refresh',
+    });
+    expect(auth.loginWithGoogle).toHaveBeenCalledWith(googleProfile);
+  });
+
+  it('googleAuth performs no logic — the guard handles the redirect', () => {
+    expect(controller.googleAuth()).toBeUndefined();
   });
 });

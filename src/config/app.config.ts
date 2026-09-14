@@ -30,6 +30,13 @@ export default registerAs('appConfig', () => ({
   // Object Store Configuration (e.g S3, Cloudinary, etc)
 
   // Google configuration
+  google: {
+    clientId: process.env.GOOGLE_CLIENT_ID || '',
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+    callbackUrl:
+      process.env.GOOGLE_CALLBACK_URL ||
+      'http://localhost:3000/auth/google/callback',
+  },
 
   // Frontendurl Configuration
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
