@@ -2,7 +2,8 @@ import { EmailVerificationService } from './email-verification.service';
 
 import { BadRequestException } from '@nestjs/common';
 
-import { AccountStatus, User } from '../../users/entities/user.entity';
+import { User } from '../../users/entities/user.entity';
+import { AccountStatus } from '../../users/enums/user.enum';
 import { UsersService } from '../../users/services/users.service';
 
 describe('EmailVerificationService', () => {

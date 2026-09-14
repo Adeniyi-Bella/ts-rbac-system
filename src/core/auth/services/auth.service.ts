@@ -3,6 +3,7 @@ import { TokenService } from './token.service';
 
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   UnauthorizedException,
@@ -10,9 +11,10 @@ import {
 import { EventEmitter2 } from '@nestjs/event-emitter';
 
 import * as bcrypt from 'bcrypt';
-import { randomUUID } from 'node:crypto';
+import { UUID, randomUUID } from 'node:crypto';
 
 import { User } from '../../users/entities/user.entity';
+import { AuthProvider } from '../../users/enums/user.enum';
 import { UsersService } from '../../users/services/users.service';
 import { LoginAuthDto } from '../dto/login.dto';
 import { RegisterAuthDto } from '../dto/register.dto';
@@ -92,5 +94,91 @@ export class AuthService {
       loginAuthDto.password,
     );
     return this.tokenService.issueTokenPair(user, randomUUID());
+  }
+
+  async findOrCreateGoogleUser(profile: {
+    googleId: string;
+    email: string;
+    name: string;
+    photo?: string;
+  }): Promise<User> {
+    const existingByGoogleId = await this.usersService.findOneByGoogleId(
+      profile.googleId,
+    );
+    if (existingByGoogleId) {
+      return existingByGoogleId;
+    }
+
+    const existingByEmail = await this.usersService.findOneByEmailWithPassword(
+      profile.email,
+    );
+
+    if (existingByEmail) {
+      if (
+        existingByEmail.googleId &&
+        existingByEmail.googleId !== profile.googleId
+      ) {
+        throw new ConflictException(
+          'This email is already linked to a different Google account.',
+        );
+      }
+
+      await this.usersService.update(existingByEmail.id as UUID, {
+        googleId: profile.googleId,
+        authProvider: existingByEmail.password
+          ? AuthProvider.HYBRID
+          : AuthProvider.GOOGLE,
+        isVerified: true,
+        emailVerifiedAt: new Date(),
+      });
+
+      const updated = await this.usersService.findOneById(
+        existingByEmail.id as UUID,
+      );
+      if (!updated) {
+        throw new UnauthorizedException('Failed to load linked account');
+      }
+      return updated;
+    }
+
+    try {
+      return await this.usersService.create({
+        email: profile.email,
+        name: profile.name,
+        password: null,
+        googleId: profile.googleId,
+        authProvider: AuthProvider.GOOGLE,
+        isVerified: true,
+        emailVerifiedAt: new Date(),
+        profilePicture: profile.photo,
+      });
+    } catch (err) {
+      if (this.isDuplicateKeyError(err)) {
+        const winner = await this.usersService.findOneByGoogleId(
+          profile.googleId,
+        );
+        if (winner) return winner;
+      }
+      throw err;
+    }
+  }
+
+  async loginWithGoogle(profile: {
+    googleId: string;
+    email: string;
+    name: string;
+    photo?: string;
+  }): Promise<LoginResponse> {
+    const user = await this.findOrCreateGoogleUser(profile);
+    return this.tokenService.issueTokenPair(user, randomUUID());
+  }
+
+  private isDuplicateKeyError(err: unknown): boolean {
+    return (
+      typeof err === 'object' &&
+      err !== null &&
+      'code' in err &&
+      (err as { code?: string }).code === '23505'
+    );
   }
 }

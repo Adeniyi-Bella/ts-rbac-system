@@ -1,18 +1,31 @@
-import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../../common/guards/roles/roles.guard';
-import { UserRole } from '../../users/entities/user.entity';
+import { UserRole } from '../../users/enums/user.enum';
 import { LoginAuthDto } from '../dto/login.dto';
 import { RefreshTokenDto } from '../dto/refresh-token.dto';
 import { RegisterAuthDto } from '../dto/register.dto';
+import { GoogleAuthGuard } from '../guards/google-auth.guard';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { AuthService } from '../services/auth.service';
 import { EmailVerificationService } from '../services/email-verification.service';
 import { PasswordResetService } from '../services/password-reset.service';
 import { TokenService } from '../services/token.service';
+import { GoogleProfile } from '../strategies/google.strategy';
 import { LoginResponse } from '../types/auth-response.type';
 
+export interface RequestWithGoogleUser extends Request {
+  user: GoogleProfile;
+}
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -74,5 +87,19 @@ export class AuthController {
     return {
       message: 'You have admin access',
     };
+  }
+
+  @Get('google')
+  @UseGuards(GoogleAuthGuard)
+  googleAuth(): void {
+    // Guard triggers the redirect to Google; nothing to do here.
+  }
+
+  @Get('google/callback')
+  @UseGuards(GoogleAuthGuard)
+  googleAuthCallback(
+    @Req() req: RequestWithGoogleUser,
+  ): Promise<LoginResponse> {
+    return this.authService.loginWithGoogle(req.user);
   }
 }

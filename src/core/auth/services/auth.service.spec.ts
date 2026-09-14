@@ -11,11 +11,12 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 
 import * as bcrypt from 'bcrypt';
 
+import { User } from '../../users/entities/user.entity';
 import {
   AccountStatus,
-  User,
+  AuthProvider,
   UserRole,
-} from '../../users/entities/user.entity';
+} from '../../users/enums/user.enum';
 import { UsersService } from '../../users/services/users.service';
 
 jest.mock('bcrypt', () => ({ compare: jest.fn(), hash: jest.fn() }));
@@ -30,6 +31,7 @@ describe('AuthService', () => {
       role: UserRole.USER,
       status: AccountStatus.ACTIVE,
       isVerified: true,
+      emailVerifiedAt: new Date(),
       loginAttempts: 0,
       lockedUntil: null,
       ...overrides,
@@ -47,9 +49,12 @@ describe('AuthService', () => {
     users = {
       findOneByEmailWithPassword: jest.fn(),
       findOneByEmail: jest.fn(),
+      findOneByGoogleId: jest.fn(),
       incrementFailedAttempts: jest.fn(),
       resetFailedAttempts: jest.fn(),
       create: jest.fn(),
+      update: jest.fn(),
+      findOneById: jest.fn(),
     };
     tokens = { issueTokenPair: jest.fn() };
     verification = { createToken: jest.fn() };
@@ -128,5 +133,155 @@ describe('AuthService', () => {
     ).rejects.toEqual(
       new ForbiddenException('Please verify your email to continue'),
     );
+  });
+
+  describe('findOrCreateGoogleUser', () => {
+    const googleProfile = {
+      googleId: 'g-12345',
+      email: 'user@example.com',
+      name: 'Google User',
+      photo: 'https://photo.test/a.jpg',
+    };
+
+    it('returns the existing user immediately on repeat Google login', async () => {
+      const existing = user({ googleId: 'g-12345' });
+      users.findOneByGoogleId.mockResolvedValue(existing);
+
+      await expect(service.findOrCreateGoogleUser(googleProfile)).resolves.toBe(
+        existing,
+      );
+      expect(users.findOneByEmailWithPassword).not.toHaveBeenCalled();
+      expect(users.update).not.toHaveBeenCalled();
+      expect(users.create).not.toHaveBeenCalled();
+    });
+
+    it('links a Google profile to an existing local account', async () => {
+      const local = user({
+        googleId: undefined,
+        password: 'hashed-password',
+        emailVerifiedAt: undefined,
+      });
+      users.findOneByGoogleId.mockResolvedValue(null);
+      users.findOneByEmailWithPassword.mockResolvedValue(local);
+      users.update.mockResolvedValue({ affected: 1 });
+      const updated = user({
+        ...local,
+        googleId: 'g-12345',
+        authProvider: AuthProvider.HYBRID,
+      });
+      users.findOneById.mockResolvedValue(updated);
+
+      await service.findOrCreateGoogleUser(googleProfile);
+
+      expect(users.update).toHaveBeenCalledWith(local.id, {
+        googleId: 'g-12345',
+        authProvider: AuthProvider.HYBRID,
+        isVerified: true,
+        emailVerifiedAt: expect.any(Date) as Date,
+      });
+    });
+
+    it('links to HYBRID only when a password already exists, otherwise GOOGLE', async () => {
+      const passwordless = user({ googleId: undefined, password: null });
+      users.findOneByGoogleId.mockResolvedValue(null);
+      users.findOneByEmailWithPassword.mockResolvedValue(passwordless);
+      users.update.mockResolvedValue({ affected: 1 });
+      users.findOneById.mockResolvedValue(passwordless);
+
+      await service.findOrCreateGoogleUser(googleProfile);
+
+      expect(users.update).toHaveBeenCalledWith(
+        passwordless.id,
+        expect.objectContaining({ authProvider: AuthProvider.GOOGLE }),
+      );
+    });
+
+    it('creates a new verified Google user when no match exists', async () => {
+      users.findOneByGoogleId.mockResolvedValue(null);
+      users.findOneByEmailWithPassword.mockResolvedValue(null);
+      const created = user({
+        id: 'new-user',
+        googleId: 'g-12345',
+        password: null,
+        authProvider: AuthProvider.GOOGLE,
+        emailVerifiedAt: new Date(),
+      });
+      users.create.mockResolvedValue(created);
+
+      await expect(service.findOrCreateGoogleUser(googleProfile)).resolves.toBe(
+        created,
+      );
+      expect(users.create).toHaveBeenCalledWith({
+        email: googleProfile.email,
+        name: googleProfile.name,
+        password: null,
+        googleId: googleProfile.googleId,
+        authProvider: AuthProvider.GOOGLE,
+        isVerified: true,
+        emailVerifiedAt: expect.any(Date) as Date,
+        profilePicture: googleProfile.photo,
+      });
+    });
+
+    it('rejects a googleId already linked to a different account', async () => {
+      const conflicting = user({ googleId: 'different-google-id' });
+      users.findOneByGoogleId.mockResolvedValue(null);
+      users.findOneByEmailWithPassword.mockResolvedValue(conflicting);
+
+      await expect(
+        service.findOrCreateGoogleUser(googleProfile),
+      ).rejects.toThrow(
+        'This email is already linked to a different Google account.',
+      );
+      expect(users.update).not.toHaveBeenCalled();
+    });
+
+    it('recovers from a duplicate-key race by returning the winning row', async () => {
+      users.findOneByGoogleId
+        .mockResolvedValueOnce(null) // first lookup, before create attempt
+        .mockResolvedValueOnce(user({ googleId: 'g-12345' })); // re-query after conflict
+      users.findOneByEmailWithPassword.mockResolvedValue(null);
+      users.create.mockRejectedValue({ code: '23505' });
+
+      const result = await service.findOrCreateGoogleUser(googleProfile);
+
+      expect(result.googleId).toBe('g-12345');
+      expect(users.findOneByGoogleId).toHaveBeenCalledTimes(2);
+    });
+
+    it('rethrows non-duplicate-key errors from user creation', async () => {
+      users.findOneByGoogleId.mockResolvedValue(null);
+      users.findOneByEmailWithPassword.mockResolvedValue(null);
+      users.create.mockRejectedValue(new Error('connection lost'));
+
+      await expect(
+        service.findOrCreateGoogleUser(googleProfile),
+      ).rejects.toThrow('connection lost');
+    });
+  });
+
+  describe('loginWithGoogle', () => {
+    it('resolves the user and issues a token pair', async () => {
+      const googleProfile = {
+        googleId: 'g-12345',
+        email: 'user@example.com',
+        name: 'Google User',
+      };
+      const account = user({ googleId: 'g-12345' });
+      users.findOneByGoogleId.mockResolvedValue(account);
+      tokens.issueTokenPair.mockResolvedValue({
+        accessToken: 'access',
+        refreshToken: 'refresh',
+      });
+
+      await expect(service.loginWithGoogle(googleProfile)).resolves.toEqual({
+        accessToken: 'access',
+        refreshToken: 'refresh',
+      });
+      expect(tokens.issueTokenPair).toHaveBeenCalledWith(
+        account,
+        expect.any(String),
+      );
+    });
   });
 });

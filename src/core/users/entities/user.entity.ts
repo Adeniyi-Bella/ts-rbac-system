@@ -12,19 +12,7 @@ import {
 
 import { PasswordReset } from '../../auth/entities/password-reset.entity';
 import { RefreshToken } from '../../auth/entities/refresh-token.entity';
-
-export enum UserRole {
-  USER = 'user',
-  ADMIN = 'admin',
-  MODERATOR = 'moderator',
-}
-
-export enum AccountStatus {
-  ACTIVE = 'active',
-  INACTIVE = 'inactive',
-  SUSPENDED = 'suspended',
-  PENDING_VERIFICATION = 'pending_verification',
-}
+import { AccountStatus, AuthProvider, UserRole } from '../enums/user.enum';
 
 @Entity('users')
 // @Index(['email']) // Indexed email
@@ -39,8 +27,8 @@ export class User {
   @Column()
   name!: string;
 
-  @Column({ select: false, nullable: true }) // Hidden from queries AND allows null for social login
-  password?: string; // Appended "?" to make it optional incase the signup came from social
+  @Column({ type: 'varchar', select: false, nullable: true }) // Hidden from queries AND allows null for social login
+  password?: string | null; // Appended "?" to make it optional incase the signup came from social
 
   @Column({
     type: 'enum',
@@ -55,6 +43,16 @@ export class User {
     default: AccountStatus.PENDING_VERIFICATION,
   })
   status!: AccountStatus;
+
+  @Column({ type: 'varchar', nullable: true, unique: true })
+  googleId?: string | null; // For Google OAuth
+
+  @Column({
+    type: 'enum',
+    enum: AuthProvider,
+    default: AuthProvider.LOCAL,
+  })
+  authProvider!: AuthProvider;
 
   @Column({ default: false })
   isVerified: boolean = false;

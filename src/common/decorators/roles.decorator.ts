@@ -1,6 +1,6 @@
 import { CustomDecorator, SetMetadata } from '@nestjs/common';
 
-import { UserRole } from '../../core/users/entities/user.entity';
+import { UserRole } from '../../core/users/enums/user.enum';
 
 export const ROLES_KEY = 'roles';
 

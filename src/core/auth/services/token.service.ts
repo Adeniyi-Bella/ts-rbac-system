@@ -4,7 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 
 import type { SignOptions } from 'jsonwebtoken';
-import { type UUID, createHmac } from 'node:crypto';
+import { type UUID, createHmac, randomUUID } from 'node:crypto';
 import { DataSource, Repository } from 'typeorm';
 
 import { User } from '../../users/entities/user.entity';
@@ -118,10 +118,13 @@ export class TokenService {
   ): Promise<LoginResponse> {
     const payload = { email: user.email, sub: user.id, role: user.role };
     const accessToken = await this.jwtService.signAsync(payload);
-    const refreshToken = await this.jwtService.signAsync(payload, {
-      secret: this.jwtRefreshSecret,
-      expiresIn: this.jwtRefreshExpiry as SignOptions['expiresIn'],
-    });
+    const refreshToken = await this.jwtService.signAsync(
+      { ...payload, jti: randomUUID() },
+      {
+        secret: this.jwtRefreshSecret,
+        expiresIn: this.jwtRefreshExpiry as SignOptions['expiresIn'],
+      },
+    );
 
     const tokenEntity = repository.create({
       token: this.hashToken(refreshToken),
